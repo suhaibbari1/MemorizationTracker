@@ -60,14 +60,9 @@ This project uses **Cloudflare Pages Functions** under `functions/api/*` and a *
 
 #### Local dev (API + UI together)
 
-To run the UI and API together locally, you’ll need Node 20+ and Wrangler:
+Cloudflare Pages deploys the API automatically from `functions/`.
 
-```bash
-npm run dev
-npm run dev:cf
-```
-
-Alternatively (no Wrangler), you can point your local UI at a deployed Pages backend:
+For local UI development, you can point your local UI at your deployed Pages backend:
 
 ```env
 VITE_API_BASE=https://<your-project>.pages.dev
