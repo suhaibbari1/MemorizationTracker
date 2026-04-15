@@ -1,5 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { addGrade, deleteGrade, loadGrades, reorderGrades, updateGrade, type Grade } from "@/lib/grades";
+import { addGradeSurah, deleteGradeSurah, loadGradeSurahs, reorderGradeSurahs, type GradeSurah } from "@/lib/gradeSurahs";
+import { JUZ_30_NUMBERS, SURAH_CATALOG } from "@/lib/surahCatalog";
 import { toast } from "sonner";
 import { ArrowLeft, Check, GripVertical, Pencil, Plus, Save, Trash2, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -18,6 +20,12 @@ const Admin = () => {
   const [editLabel, setEditLabel] = useState("");
   const [editSortOrder, setEditSortOrder] = useState<number>(0);
 
+  const [selectedGradeCode, setSelectedGradeCode] = useState<string>("4th");
+  const [gradeSurahs, setGradeSurahs] = useState<GradeSurah[]>([]);
+  const [surahToAdd, setSurahToAdd] = useState<number>(114);
+  const [dirtySurahOrder, setDirtySurahOrder] = useState(false);
+  const [dragSurahId, setDragSurahId] = useState<string | null>(null);
+
   async function refresh() {
     try {
       setLoading(true);
@@ -25,6 +33,9 @@ const Admin = () => {
       // Keep in the same order returned by API (already sorted by sort_order)
       setGrades(data);
       setDirtyOrder(false);
+      if (data.length > 0 && !data.some((g) => g.code === selectedGradeCode)) {
+        setSelectedGradeCode(data[0].code);
+      }
     } catch (e) {
       console.error(e);
       toast.error("Failed to load grades");
@@ -36,6 +47,19 @@ const Admin = () => {
   useEffect(() => {
     refresh();
   }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const rows = await loadGradeSurahs(selectedGradeCode);
+        setGradeSurahs(rows);
+        setDirtySurahOrder(false);
+      } catch (e) {
+        console.error(e);
+        setGradeSurahs([]);
+      }
+    })();
+  }, [selectedGradeCode]);
 
   const onAdd = async () => {
     const c = code.trim();
@@ -122,6 +146,61 @@ const Admin = () => {
     }
   };
 
+  const surahsSorted = useMemo(() => {
+    return [...gradeSurahs].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || b.surah_number - a.surah_number);
+  }, [gradeSurahs]);
+
+  const onAddSurah = async () => {
+    try {
+      await addGradeSurah(selectedGradeCode, surahToAdd);
+      toast.success("Surah added");
+      const rows = await loadGradeSurahs(selectedGradeCode);
+      setGradeSurahs(rows);
+      setDirtySurahOrder(false);
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.message || "Failed to add surah");
+    }
+  };
+
+  const onDeleteSurah = async (id: string) => {
+    try {
+      await deleteGradeSurah(id);
+      setGradeSurahs((prev) => prev.filter((x) => x.id !== id));
+      toast.success("Removed surah");
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.message || "Failed to remove surah");
+    }
+  };
+
+  const moveSurah = (fromId: string, toId: string) => {
+    if (fromId === toId) return;
+    setGradeSurahs((prev) => {
+      const fromIdx = prev.findIndex((x) => x.id === fromId);
+      const toIdx = prev.findIndex((x) => x.id === toId);
+      if (fromIdx < 0 || toIdx < 0) return prev;
+      const next = [...prev];
+      const [item] = next.splice(fromIdx, 1);
+      next.splice(toIdx, 0, item);
+      return next;
+    });
+    setDirtySurahOrder(true);
+  };
+
+  const saveSurahOrder = async () => {
+    try {
+      await reorderGradeSurahs(selectedGradeCode, gradeSurahs.map((x) => x.id));
+      toast.success("Surah order saved");
+      setDirtySurahOrder(false);
+      const rows = await loadGradeSurahs(selectedGradeCode);
+      setGradeSurahs(rows);
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.message || "Failed to save surah order");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b border-border bg-card/80 backdrop-blur-sm sticky top-0 z-10">
@@ -173,6 +252,104 @@ const Admin = () => {
               <Plus size={16} />
               Add grade
             </button>
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-border bg-card p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Surahs by grade</h2>
+              <p className="text-xs text-muted-foreground mt-1">Pick from Juz 30 (with Arabic) and reorder.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <select
+                value={selectedGradeCode}
+                onChange={(e) => setSelectedGradeCode(e.target.value)}
+                className="px-3 py-2 rounded-md border border-border bg-background text-sm"
+              >
+                {grades.map((g) => (
+                  <option key={g.id} value={g.code}>
+                    {g.label}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={saveSurahOrder}
+                disabled={!dirtySurahOrder || gradeSurahs.length === 0}
+                className="inline-flex items-center gap-2 px-2 py-2 rounded-md border border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-50"
+                title="Save surah order"
+              >
+                <Save size={14} />
+                Save
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-3 flex flex-col sm:flex-row gap-2">
+            <select
+              value={surahToAdd}
+              onChange={(e) => setSurahToAdd(Number(e.target.value))}
+              className="flex-1 px-3 py-2 rounded-md border border-border bg-background text-sm"
+            >
+              {JUZ_30_NUMBERS.slice().sort((a, b) => b - a).map((n) => {
+                const s = SURAH_CATALOG[n];
+                return (
+                  <option key={n} value={n}>
+                    {n}. {s.name} ({s.arabic})
+                  </option>
+                );
+              })}
+            </select>
+            <button
+              onClick={onAddSurah}
+              className="px-3 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium"
+            >
+              Add Surah
+            </button>
+          </div>
+
+          <div className="mt-3 grid gap-2">
+            {surahsSorted.map((row) => {
+              const info = SURAH_CATALOG[row.surah_number];
+              const label = info ? `${info.name} (${info.arabic})` : `Surah ${row.surah_number}`;
+              return (
+                <div
+                  key={row.id}
+                  draggable
+                  onDragStart={() => setDragSurahId(row.id)}
+                  onDragEnd={() => setDragSurahId(null)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => {
+                    if (!dragSurahId) return;
+                    moveSurah(dragSurahId, row.id);
+                    setDragSurahId(null);
+                  }}
+                  className={`flex items-center justify-between rounded-md border p-3 ${
+                    dragSurahId === row.id ? "border-primary/50 bg-primary/5" : "border-border bg-background"
+                  }`}
+                  title="Drag to reorder"
+                >
+                  <div className="min-w-0 flex items-center gap-2">
+                    <GripVertical size={16} className="text-muted-foreground shrink-0" />
+                    <div className="min-w-0">
+                      <div className="font-semibold text-foreground">
+                        {row.surah_number}. {label}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => onDeleteSurah(row.id)}
+                    className="p-2 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                    title="Remove surah"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              );
+            })}
+            {surahsSorted.length === 0 && (
+              <div className="text-sm text-muted-foreground mt-2">No surahs configured for this grade yet.</div>
+            )}
           </div>
         </div>
 

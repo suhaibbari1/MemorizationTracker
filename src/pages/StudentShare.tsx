@@ -1,13 +1,16 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
-import { CustomItemProgress, SURAHS, SurahProgress, StudentData, getStudentStats } from "@/lib/data";
+import { StudentData, SurahProgress, getStudentStats } from "@/lib/data";
 import { StarRating } from "@/components/StarRating";
 import { BookOpen, Sparkles, Loader2, Star, BookOpenText } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import { loadGradeSurahs } from "@/lib/gradeSurahs";
+import { SURAH_CATALOG, type SurahInfo } from "@/lib/surahCatalog";
 
 const StudentShare = () => {
   const { studentId } = useParams<{ studentId: string }>();
   const [student, setStudent] = useState<StudentData | null>(null);
+  const [surahs, setSurahs] = useState<SurahInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
@@ -17,6 +20,16 @@ const StudentShare = () => {
       try {
         const s = await apiFetch<StudentData>(`/api/student/${encodeURIComponent(studentId)}`, { method: "GET" });
         setStudent(s);
+
+        const grade = (s as any).grade || "4th";
+        const rows = await loadGradeSurahs(grade);
+        const list = rows
+          .slice()
+          .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+          .map((r) => SURAH_CATALOG[r.surah_number])
+          .filter(Boolean) as SurahInfo[];
+        setSurahs(list);
+
         setLoading(false);
       } catch {
         setError(true);
@@ -45,7 +58,7 @@ const StudentShare = () => {
     );
   }
 
-  const stats = getStudentStats(student);
+  const stats = getStudentStats(student, surahs.length);
 
   return (
     <div className="min-h-screen bg-background">
@@ -86,7 +99,7 @@ const StudentShare = () => {
         </div>
 
         <div className="grid gap-1">
-          {SURAHS.map((surah) => {
+          {surahs.map((surah) => {
             const progress: SurahProgress = student.progress[surah.number] || {
               stars: 0,
               firstAttempt: true,

@@ -154,7 +154,7 @@ export async function addStudent(name: string, grade: string = "4th"): Promise<s
 export async function deleteStudent(studentId: string): Promise<void> {
   await apiFetch<{ ok: true }>(`/api/students/${encodeURIComponent(studentId)}`, { method: "DELETE" });
 }
-export function getStudentStats(student: StudentData) {
+export function getStudentStats(student: StudentData, surahTotal: number) {
   const surahCompleted = Object.values(student.progress).filter((p) => p.stars === 5).length;
   const customCompleted = student.customItems.filter((p) => p.stars === 5).length;
   const completed = surahCompleted + customCompleted;
@@ -169,6 +169,6 @@ export function getStudentStats(student: StudentData) {
   const customStars = student.customItems.reduce((sum, p) => sum + p.stars, 0);
   const totalStars = surahStars + customStars;
 
-  const total = SURAHS.length + student.customItems.length;
+  const total = surahTotal + student.customItems.length;
   return { completed, firstAttemptPerfect, totalStars, total };
 }

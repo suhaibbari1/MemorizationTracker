@@ -1,14 +1,15 @@
-import { StudentData, getStudentStats, SURAHS } from "@/lib/data";
+import { StudentData, getStudentStats } from "@/lib/data";
 import { StarRating } from "./StarRating";
 import { Award, TrendingUp } from "lucide-react";
 
 interface StudentCardProps {
   student: StudentData;
+  surahTotal: number;
   onClick: () => void;
 }
 
-export function StudentCard({ student, onClick }: StudentCardProps) {
-  const stats = getStudentStats(student);
+export function StudentCard({ student, surahTotal, onClick }: StudentCardProps) {
+  const stats = getStudentStats(student, surahTotal);
   const percentage = Math.round((stats.completed / stats.total) * 100);
 
   return (
@@ -29,7 +30,7 @@ export function StudentCard({ student, onClick }: StudentCardProps) {
       </div>
       <div className="mb-2">
         <div className="flex justify-between text-xs text-muted-foreground mb-1">
-          <span>{stats.completed}/{stats.total} surahs mastered</span>
+          <span>{stats.completed}/{stats.total} items mastered</span>
           <span>{percentage}%</span>
         </div>
         <div className="h-2 rounded-full bg-muted overflow-hidden">

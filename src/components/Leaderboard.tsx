@@ -1,4 +1,5 @@
-import { CustomItemProgress, StudentData, getStudentStats, SurahProgress, SURAHS } from "@/lib/data";
+import { CustomItemProgress, StudentData, getStudentStats, SurahProgress } from "@/lib/data";
+import type { SurahInfo } from "@/lib/surahCatalog";
 import { Trophy, Medal, Award, Star, Download, Upload, FileSpreadsheet } from "lucide-react";
 import { useRef } from "react";
 import { toast } from "sonner";
@@ -7,15 +8,16 @@ import { apiFetch } from "@/lib/api";
 
 interface LeaderboardProps {
   students: StudentData[];
+  surahs: SurahInfo[];
   onDataImported: () => void;
 }
 
-export function Leaderboard({ students, onDataImported }: LeaderboardProps) {
+export function Leaderboard({ students, surahs, onDataImported }: LeaderboardProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const studentsWithStats = students.map(student => ({
     ...student,
-    stats: getStudentStats(student)
+    stats: getStudentStats(student, surahs.length)
   }));
 
   const totalStars = studentsWithStats.reduce((sum, student) => sum + student.stats.totalStars, 0);
@@ -54,7 +56,7 @@ export function Leaderboard({ students, onDataImported }: LeaderboardProps) {
   const handleExportExcel = () => {
     const alphabeticalStudents = [...studentsWithStats].sort((a, b) => a.name.localeCompare(b.name));
     // Rows = surahs, Columns = students (transposed)
-    const rows: Record<string, string | number>[] = SURAHS.map(surah => {
+    const rows: Record<string, string | number>[] = surahs.map(surah => {
       const row: Record<string, string | number> = { Surah: `${surah.number}. ${surah.name}` };
       for (const student of alphabeticalStudents) {
         const p = student.progress[surah.number];

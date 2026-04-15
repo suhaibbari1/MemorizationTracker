@@ -19,6 +19,8 @@ import { useSwipe } from "@/hooks/use-swipe";
 import wiseLogo from "@/assets/wise-logo.jpg";
 import { loadGrades, type Grade } from "@/lib/grades";
 import { Link } from "react-router-dom";
+import { loadGradeSurahs } from "@/lib/gradeSurahs";
+import { SURAH_CATALOG, type SurahInfo } from "@/lib/surahCatalog";
 
 function getStudentPerfStats(student: StudentData) {
   const surahProgress = Object.values(student.progress || {});
@@ -66,6 +68,7 @@ const Index = () => {
   const [showAddForm, setShowAddForm] = useState(false);
   const [grades, setGrades] = useState<Grade[]>([]);
   const [grade, setGrade] = useState<string>("4th");
+  const [surahs, setSurahs] = useState<SurahInfo[]>([]);
   const [sortMode, setSortMode] = useState<SortMode>(() => {
     const saved = localStorage.getItem("studentSortMode");
     return saved === "alpha" ? "alpha" : "performance";
@@ -90,6 +93,23 @@ const Index = () => {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const rows = await loadGradeSurahs(grade);
+        const list = rows
+          .slice()
+          .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+          .map((r) => SURAH_CATALOG[r.surah_number])
+          .filter(Boolean) as SurahInfo[];
+        setSurahs(list);
+      } catch (e) {
+        console.error(e);
+        setSurahs([]);
+      }
+    })();
+  }, [grade]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -450,6 +470,7 @@ const Index = () => {
                     <div key={student.id} className="relative group">
                       <StudentCard
                         student={student}
+                        surahTotal={surahs.length}
                         onClick={() => setSelectedStudentId(student.id)}
                       />
                       <button
@@ -467,7 +488,7 @@ const Index = () => {
                 </div>
               </>
             ) : (
-              <Leaderboard students={students} onDataImported={fetchData} />
+              <Leaderboard students={students} surahs={surahs} onDataImported={fetchData} />
             )}
           </>
         ) : (
@@ -478,6 +499,7 @@ const Index = () => {
             return (
               <StudentDetail
                 student={selected}
+                surahs={surahs}
                 onBack={() => setSelectedStudentId(null)}
                 onUpdateSurah={(surahNumber, stars) =>
                   handleUpdateSurah(idx, surahNumber, stars)

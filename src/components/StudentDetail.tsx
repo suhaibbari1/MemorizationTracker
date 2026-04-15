@@ -1,11 +1,13 @@
 import { useState, useRef } from "react";
-import { CustomItemProgress, StudentData, SURAHS, SurahProgress } from "@/lib/data";
+import { CustomItemProgress, StudentData, SurahProgress } from "@/lib/data";
+import type { SurahInfo } from "@/lib/surahCatalog";
 import { StarRating } from "./StarRating";
 import { ArrowLeft, Sparkles, RotateCcw, CheckSquare, Square, Star, Share2, ArrowDownToLine, Plus, Trash2, BookOpenText } from "lucide-react";
 import { toast } from "sonner";
 
 interface StudentDetailProps {
   student: StudentData;
+  surahs: SurahInfo[];
   onBack: () => void;
   onUpdateSurah: (surahNumber: number, stars: number) => void;
   onResetSurah: (surahNumber: number) => void;
@@ -17,6 +19,7 @@ interface StudentDetailProps {
 
 export function StudentDetail({
   student,
+  surahs,
   onBack,
   onUpdateSurah,
   onResetSurah,
@@ -33,7 +36,7 @@ export function StudentDetail({
   const [newItemTitle, setNewItemTitle] = useState("");
 
   const toggleSelect = (surahNumber: number) => {
-    const idx = SURAHS.findIndex((s) => s.number === surahNumber);
+    const idx = surahs.findIndex((s) => s.number === surahNumber);
     lastSelectedIdx.current = idx;
     setSelected((prev) => {
       const next = new Set(prev);
@@ -44,14 +47,14 @@ export function StudentDetail({
   };
 
   const selectRange = (surahNumber: number) => {
-    const currentIdx = SURAHS.findIndex((s) => s.number === surahNumber);
+    const currentIdx = surahs.findIndex((s) => s.number === surahNumber);
     const startIdx = lastSelectedIdx.current ?? currentIdx;
     const [from, to] = startIdx < currentIdx ? [startIdx, currentIdx] : [currentIdx, startIdx];
     
     setSelected((prev) => {
       const next = new Set(prev);
       for (let i = from; i <= to; i++) {
-        next.add(SURAHS[i].number);
+        next.add(surahs[i].number);
       }
       return next;
     });
@@ -60,10 +63,10 @@ export function StudentDetail({
   };
 
   const selectAll = () => {
-    if (selected.size === SURAHS.length) {
+    if (selected.size === surahs.length) {
       setSelected(new Set());
     } else {
-      setSelected(new Set(SURAHS.map((s) => s.number)));
+      setSelected(new Set(surahs.map((s) => s.number)));
     }
   };
 
@@ -150,7 +153,7 @@ export function StudentDetail({
               onClick={selectAll}
               className="text-xs font-medium text-primary hover:underline"
             >
-              {selected.size === SURAHS.length ? "Deselect All" : "Select All"}
+              {selected.size === surahs.length ? "Deselect All" : "Select All"}
             </button>
             <button
               onClick={() => {
@@ -296,7 +299,7 @@ export function StudentDetail({
       </div>
 
       <div className="grid gap-1">
-        {SURAHS.map((surah) => {
+        {surahs.map((surah) => {
           const progress: SurahProgress = student.progress[surah.number] || {
             stars: 0,
             firstAttempt: true,
@@ -304,7 +307,7 @@ export function StudentDetail({
           };
 
           const isRangeStart = rangeSelectMode && lastSelectedIdx.current !== null && 
-            SURAHS[lastSelectedIdx.current]?.number === surah.number;
+            surahs[lastSelectedIdx.current]?.number === surah.number;
 
           return (
             <div

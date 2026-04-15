@@ -24,6 +24,13 @@ type CustomItemRow = {
   attempts: number;
 };
 
+type GradeSurahRow = {
+  id: string;
+  grade_code: string;
+  surah_number: number;
+  sort_order: number;
+};
+
 function json(data: unknown, init?: ResponseInit) {
   return new Response(JSON.stringify(data), {
     headers: {
@@ -223,6 +230,78 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
       return json(data.filter((s: any) => String(s.grade || "4th") === grade));
     }
 
+    // GET /api/grade-surahs?grade=4th
+    if (method === "GET" && path.length === 1 && path[0] === "grade-surahs") {
+      const grade = url.searchParams.get("grade") || "";
+      if (!grade) return badRequest("grade is required");
+      // Support DBs before migration
+      try {
+        const rows = await env.DB
+          .prepare("SELECT id, grade_code, surah_number, sort_order FROM grade_surahs WHERE grade_code = ? ORDER BY sort_order ASC, surah_number DESC")
+          .bind(grade)
+          .all<GradeSurahRow>();
+        return json(rows.results || []);
+      } catch {
+        return json([]);
+      }
+    }
+
+    // POST /api/grade-surahs { grade, surahNumber }
+    if (method === "POST" && path.length === 1 && path[0] === "grade-surahs") {
+      const body = await readJson<{ grade?: string; surahNumber?: number }>(request);
+      const grade = (body.grade || "").trim();
+      const surahNumber = Number(body.surahNumber);
+      if (!grade) return badRequest("grade is required");
+      if (!Number.isFinite(surahNumber)) return badRequest("surahNumber is required");
+
+      // Ensure table exists (in case migration hasn't run yet)
+      await env.DB.batch([
+        env.DB.prepare(
+          "CREATE TABLE IF NOT EXISTS grade_surahs (id TEXT PRIMARY KEY, grade_code TEXT NOT NULL, surah_number INTEGER NOT NULL, sort_order INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')), UNIQUE (grade_code, surah_number))"
+        ),
+        env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_grade_surahs_grade_sort ON grade_surahs(grade_code, sort_order, surah_number)"),
+      ]);
+
+      const id = uuidLike();
+      // place at end
+      const max = await env.DB
+        .prepare("SELECT COALESCE(MAX(sort_order), 0) as m FROM grade_surahs WHERE grade_code = ?")
+        .bind(grade)
+        .first<{ m: number }>();
+      const sortOrder = (Number(max?.m || 0) || 0) + 10;
+
+      await env.DB
+        .prepare("INSERT INTO grade_surahs (id, grade_code, surah_number, sort_order) VALUES (?, ?, ?, ?)")
+        .bind(id, grade, surahNumber, sortOrder)
+        .run();
+      return json({ id });
+    }
+
+    // DELETE /api/grade-surahs/:id
+    if (method === "DELETE" && path.length === 2 && path[0] === "grade-surahs") {
+      const id = path[1];
+      await env.DB.prepare("DELETE FROM grade_surahs WHERE id = ?").bind(id).run();
+      return json({ ok: true });
+    }
+
+    // POST /api/grade-surahs/reorder { grade, ids: string[] }
+    if (method === "POST" && path.length === 2 && path[0] === "grade-surahs" && path[1] === "reorder") {
+      const body = await readJson<{ grade?: string; ids?: string[] }>(request);
+      const grade = (body.grade || "").trim();
+      const ids = Array.isArray(body.ids) ? body.ids.filter((x) => typeof x === "string" && x.trim()) : [];
+      if (!grade) return badRequest("grade is required");
+      if (ids.length === 0) return badRequest("ids is required");
+
+      const stmts: D1PreparedStatement[] = [];
+      for (let i = 0; i < ids.length; i++) {
+        const id = ids[i];
+        const sortOrder = (i + 1) * 10;
+        stmts.push(env.DB.prepare("UPDATE grade_surahs SET sort_order = ? WHERE id = ? AND grade_code = ?").bind(sortOrder, id, grade));
+      }
+      await env.DB.batch(stmts);
+      return json({ ok: true });
+    }
+
     // POST /api/students { name }
     if (method === "POST" && path.length === 1 && path[0] === "students") {
       const body = await readJson<{ name?: string; grade?: string }>(request);
@@ -259,7 +338,15 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
     // GET /api/student/:id
     if (method === "GET" && path.length === 2 && path[0] === "student") {
       const id = path[1];
-      const s = await env.DB.prepare("SELECT id, name FROM students WHERE id = ?").bind(id).first<{ id: string; name: string }>();
+      let s: { id: string; name: string; grade?: string } | null = null;
+      try {
+        s = await env.DB
+          .prepare("SELECT id, name, grade FROM students WHERE id = ?")
+          .bind(id)
+          .first<{ id: string; name: string; grade: string }>();
+      } catch {
+        s = await env.DB.prepare("SELECT id, name FROM students WHERE id = ?").bind(id).first<{ id: string; name: string }>();
+      }
       if (!s) return notFound();
 
       const p = await env.DB
@@ -280,6 +367,7 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
       return json({
         id: s.id,
         name: s.name,
+        grade: (s as any).grade || "4th",
         progress,
         customItems: (ci.results || []).map((x) => ({
           id: x.id,
