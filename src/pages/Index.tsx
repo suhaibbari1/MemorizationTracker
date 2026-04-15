@@ -48,6 +48,13 @@ function sortStudentsByPerformance(list: StudentData[]) {
   });
 }
 
+type SortMode = "performance" | "alpha";
+
+function sortStudents(list: StudentData[], mode: SortMode) {
+  if (mode === "alpha") return [...list].sort((a, b) => a.name.localeCompare(b.name));
+  return sortStudentsByPerformance(list);
+}
+
 const Index = () => {
   const [students, setStudents] = useState<StudentData[]>([]);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
@@ -56,18 +63,26 @@ const Index = () => {
   const [newStudentName, setNewStudentName] = useState("");
   const [showAddForm, setShowAddForm] = useState(false);
   const [grade, setGrade] = useState<"3rd" | "4th">("4th");
+  const [sortMode, setSortMode] = useState<SortMode>(() => {
+    const saved = localStorage.getItem("studentSortMode");
+    return saved === "alpha" ? "alpha" : "performance";
+  });
+
+  useEffect(() => {
+    localStorage.setItem("studentSortMode", sortMode);
+  }, [sortMode]);
 
   const fetchData = useCallback(async () => {
     try {
       const data = await loadData(grade);
-      setStudents(sortStudentsByPerformance(data));
+      setStudents(sortStudents(data, sortMode));
     } catch (err) {
       console.error("Failed to load data:", err);
       toast.error("Backend not reachable. Set VITE_API_BASE or run via Cloudflare Pages dev.");
     } finally {
       setLoading(false);
     }
-  }, [grade]);
+  }, [grade, sortMode]);
 
   useEffect(() => {
     fetchData();
@@ -85,7 +100,7 @@ const Index = () => {
       const s = { ...updated[studentIdx] };
       s.progress = { ...s.progress, [surahNumber]: { stars, firstAttempt, attempts } };
       updated[studentIdx] = s;
-      return sortStudentsByPerformance(updated);
+      return sortStudents(updated, sortMode);
     });
 
     try {
@@ -110,7 +125,7 @@ const Index = () => {
         { id: `temp:${Date.now()}`, title: trimmed, stars: 0, firstAttempt: true, attempts: 0 },
       ].sort((a, b) => a.title.localeCompare(b.title));
       updated[studentIdx] = s;
-      return sortStudentsByPerformance(updated);
+      return sortStudents(updated, sortMode);
     });
 
     try {
@@ -137,7 +152,7 @@ const Index = () => {
         ci.id === itemId ? { ...ci, stars, firstAttempt, attempts } : ci
       );
       updated[studentIdx] = s;
-      return sortStudentsByPerformance(updated);
+      return sortStudents(updated, sortMode);
     });
 
     try {
@@ -156,7 +171,7 @@ const Index = () => {
       const s = { ...updated[studentIdx] };
       s.customItems = s.customItems.filter((ci) => ci.id !== itemId);
       updated[studentIdx] = s;
-      return sortStudentsByPerformance(updated);
+      return sortStudents(updated, sortMode);
     });
 
     // If it's an optimistic temp item, just drop it locally
@@ -181,7 +196,7 @@ const Index = () => {
       const { [surahNumber]: _, ...rest } = s.progress;
       s.progress = rest;
       updated[studentIdx] = s;
-      return sortStudentsByPerformance(updated);
+      return sortStudents(updated, sortMode);
     });
 
     try {
@@ -208,7 +223,7 @@ const Index = () => {
       }
       s.progress = newProgress;
       updated[studentIdx] = s;
-      return sortStudentsByPerformance(updated);
+      return sortStudents(updated, sortMode);
     });
 
     try {
@@ -370,6 +385,13 @@ const Index = () => {
                     Students
                   </h2>
                   <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setSortMode((m) => (m === "performance" ? "alpha" : "performance"))}
+                      className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                      title={sortMode === "performance" ? "Sorting by performance" : "Sorting alphabetically"}
+                    >
+                      Sort: {sortMode === "performance" ? "Performance" : "A–Z"}
+                    </button>
                     <span className="text-xs text-muted-foreground">{students.length} students</span>
                     <button
                       onClick={() => setShowAddForm(!showAddForm)}
