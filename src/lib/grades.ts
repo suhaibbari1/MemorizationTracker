@@ -23,3 +23,10 @@ export async function deleteGrade(id: string): Promise<void> {
   await apiFetch<{ ok: true }>(`/api/grades/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
+export async function reorderGrades(ids: string[]): Promise<void> {
+  await apiFetch<{ ok: true }>(`/api/grades/reorder`, {
+    method: "POST",
+    body: JSON.stringify({ ids }),
+  });
+}
+

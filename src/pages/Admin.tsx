@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
-import { addGrade, deleteGrade, loadGrades, type Grade } from "@/lib/grades";
+import { useEffect, useState } from "react";
+import { addGrade, deleteGrade, loadGrades, reorderGrades, type Grade } from "@/lib/grades";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, GripVertical, Plus, Save, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 const Admin = () => {
@@ -11,16 +11,16 @@ const Admin = () => {
   const [code, setCode] = useState("");
   const [label, setLabel] = useState("");
   const [sortOrder, setSortOrder] = useState<number>(0);
-
-  const sorted = useMemo(() => {
-    return [...grades].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.label.localeCompare(b.label));
-  }, [grades]);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dirtyOrder, setDirtyOrder] = useState(false);
 
   async function refresh() {
     try {
       setLoading(true);
       const data = await loadGrades();
+      // Keep in the same order returned by API (already sorted by sort_order)
       setGrades(data);
+      setDirtyOrder(false);
     } catch (e) {
       console.error(e);
       toast.error("Failed to load grades");
@@ -59,6 +59,32 @@ const Admin = () => {
     } catch (e: any) {
       console.error(e);
       toast.error(e?.message || "Failed to remove grade");
+    }
+  };
+
+  const move = (fromId: string, toId: string) => {
+    if (fromId === toId) return;
+    setGrades((prev) => {
+      const fromIdx = prev.findIndex((g) => g.id === fromId);
+      const toIdx = prev.findIndex((g) => g.id === toId);
+      if (fromIdx < 0 || toIdx < 0) return prev;
+      const next = [...prev];
+      const [item] = next.splice(fromIdx, 1);
+      next.splice(toIdx, 0, item);
+      return next;
+    });
+    setDirtyOrder(true);
+  };
+
+  const saveOrder = async () => {
+    try {
+      await reorderGrades(grades.map((g) => g.id));
+      toast.success("Grade order saved");
+      setDirtyOrder(false);
+      refresh();
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.message || "Failed to save order");
     }
   };
 
@@ -119,19 +145,50 @@ const Admin = () => {
         <div className="rounded-lg border border-border bg-card p-4">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Grades</h2>
-            <span className="text-xs text-muted-foreground">{grades.length} total</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">{grades.length} total</span>
+              <button
+                onClick={saveOrder}
+                disabled={!dirtyOrder || grades.length === 0}
+                className="inline-flex items-center gap-2 px-2 py-1 rounded-md border border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-50"
+                title="Save grade order"
+              >
+                <Save size={14} />
+                Save order
+              </button>
+            </div>
           </div>
 
           {loading ? (
             <div className="mt-4 text-sm text-muted-foreground">Loading…</div>
           ) : (
             <div className="mt-3 grid gap-2">
-              {sorted.map((g) => (
-                <div key={g.id} className="flex items-center justify-between rounded-md border border-border bg-background p-3">
-                  <div className="min-w-0">
-                    <div className="font-semibold text-foreground">{g.label}</div>
-                    <div className="text-xs text-muted-foreground">
-                      code: <span className="font-mono">{g.code}</span> · sort: {g.sort_order ?? 0}
+              {grades.map((g) => (
+                <div
+                  key={g.id}
+                  draggable
+                  onDragStart={() => setDragId(g.id)}
+                  onDragEnd={() => setDragId(null)}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                  }}
+                  onDrop={() => {
+                    if (!dragId) return;
+                    move(dragId, g.id);
+                    setDragId(null);
+                  }}
+                  className={`flex items-center justify-between rounded-md border p-3 ${
+                    dragId === g.id ? "border-primary/50 bg-primary/5" : "border-border bg-background"
+                  }`}
+                  title="Drag to reorder"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <GripVertical size={16} className="text-muted-foreground shrink-0" />
+                    <div className="min-w-0">
+                      <div className="font-semibold text-foreground">{g.label}</div>
+                      <div className="text-xs text-muted-foreground">
+                        code: <span className="font-mono">{g.code}</span> · sort: {g.sort_order ?? 0}
+                      </div>
                     </div>
                   </div>
                   <button

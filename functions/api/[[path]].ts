@@ -162,6 +162,22 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
       return json({ ok: true });
     }
 
+    // POST /api/grades/reorder { ids: string[] }
+    if (method === "POST" && path.length === 2 && path[0] === "grades" && path[1] === "reorder") {
+      const body = await readJson<{ ids?: string[] }>(request);
+      const ids = Array.isArray(body.ids) ? body.ids.filter((x) => typeof x === "string" && x.trim()) : [];
+      if (ids.length === 0) return badRequest("ids is required");
+
+      const stmts: D1PreparedStatement[] = [];
+      for (let i = 0; i < ids.length; i++) {
+        const id = ids[i];
+        const sortOrder = (i + 1) * 10;
+        stmts.push(env.DB.prepare("UPDATE grades SET sort_order = ? WHERE id = ?").bind(sortOrder, id));
+      }
+      await env.DB.batch(stmts);
+      return json({ ok: true });
+    }
+
     // GET /api/students
     if (method === "GET" && path.length === 1 && path[0] === "students") {
       const grade = url.searchParams.get("grade");
