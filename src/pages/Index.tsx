@@ -14,10 +14,11 @@ import { toast } from "sonner";
 import { StudentCard } from "@/components/StudentCard";
 import { StudentDetail } from "@/components/StudentDetail";
 import { Leaderboard } from "@/components/Leaderboard";
-import { Users, BarChart3, Loader2, Plus, Trash2 } from "lucide-react";
+import { Users, BarChart3, Loader2, Plus, Trash2, Settings } from "lucide-react";
 import { useSwipe } from "@/hooks/use-swipe";
 import wiseLogo from "@/assets/wise-logo.jpg";
 import { loadGrades, type Grade } from "@/lib/grades";
+import { Link } from "react-router-dom";
 
 function getStudentPerfStats(student: StudentData) {
   const surahProgress = Object.values(student.progress || {});
@@ -328,18 +329,29 @@ const Index = () => {
     <div className="min-h-screen bg-background">
       <header className="border-b border-border bg-card/80 backdrop-blur-sm sticky top-0 z-10">
         <div className="container max-w-3xl mx-auto px-4 py-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg overflow-hidden flex items-center justify-center">
-              <img src={wiseLogo} alt="WISE Logo" className="w-10 h-10 object-contain" />
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg overflow-hidden flex items-center justify-center">
+                <img src={wiseLogo} alt="WISE Logo" className="w-10 h-10 object-contain" />
+              </div>
+              <div>
+                <h1 className="text-xl font-extrabold font-sans text-foreground leading-tight">
+                  WISE Sunday School
+                </h1>
+                <p className="text-xs text-muted-foreground">
+                  Quran Memorization Tracker
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-xl font-extrabold font-sans text-foreground leading-tight">
-                WISE Sunday School
-              </h1>
-              <p className="text-xs text-muted-foreground">
-                Quran Memorization Tracker
-              </p>
-            </div>
+
+            <Link
+              to="/admin"
+              className="p-2 rounded-md border border-border bg-background/70 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              title="Admin"
+              aria-label="Admin settings"
+            >
+              <Settings size={18} />
+            </Link>
           </div>
         </div>
       </header>
