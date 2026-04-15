@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { addGrade, deleteGrade, loadGrades, reorderGrades, type Grade } from "@/lib/grades";
+import { addGrade, deleteGrade, loadGrades, reorderGrades, updateGrade, type Grade } from "@/lib/grades";
 import { toast } from "sonner";
-import { ArrowLeft, GripVertical, Plus, Save, Trash2 } from "lucide-react";
+import { ArrowLeft, Check, GripVertical, Pencil, Plus, Save, Trash2, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 const Admin = () => {
@@ -13,6 +13,10 @@ const Admin = () => {
   const [sortOrder, setSortOrder] = useState<number>(0);
   const [dragId, setDragId] = useState<string | null>(null);
   const [dirtyOrder, setDirtyOrder] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editCode, setEditCode] = useState("");
+  const [editLabel, setEditLabel] = useState("");
+  const [editSortOrder, setEditSortOrder] = useState<number>(0);
 
   async function refresh() {
     try {
@@ -85,6 +89,36 @@ const Admin = () => {
     } catch (e: any) {
       console.error(e);
       toast.error(e?.message || "Failed to save order");
+    }
+  };
+
+  const startEdit = (g: Grade) => {
+    setEditingId(g.id);
+    setEditCode(g.code);
+    setEditLabel(g.label);
+    setEditSortOrder(g.sort_order ?? 0);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditCode("");
+    setEditLabel("");
+    setEditSortOrder(0);
+  };
+
+  const saveEdit = async (g: Grade) => {
+    try {
+      await updateGrade(g.id, {
+        code: editCode.trim(),
+        label: editLabel.trim(),
+        sortOrder: editSortOrder,
+      });
+      toast.success("Grade updated");
+      cancelEdit();
+      refresh();
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.message || "Failed to update grade");
     }
   };
 
@@ -166,7 +200,7 @@ const Admin = () => {
               {grades.map((g) => (
                 <div
                   key={g.id}
-                  draggable
+                  draggable={editingId !== g.id}
                   onDragStart={() => setDragId(g.id)}
                   onDragEnd={() => setDragId(null)}
                   onDragOver={(e) => {
@@ -184,20 +218,74 @@ const Admin = () => {
                 >
                   <div className="flex items-center gap-2 min-w-0">
                     <GripVertical size={16} className="text-muted-foreground shrink-0" />
-                    <div className="min-w-0">
-                      <div className="font-semibold text-foreground">{g.label}</div>
-                      <div className="text-xs text-muted-foreground">
-                        code: <span className="font-mono">{g.code}</span> · sort: {g.sort_order ?? 0}
+                    {editingId === g.id ? (
+                      <div className="min-w-0 flex-1 grid gap-2 sm:grid-cols-3">
+                        <input
+                          value={editCode}
+                          onChange={(e) => setEditCode(e.target.value)}
+                          className="px-2 py-1 rounded-md border border-border bg-background text-sm"
+                          placeholder="Code"
+                        />
+                        <input
+                          value={editLabel}
+                          onChange={(e) => setEditLabel(e.target.value)}
+                          className="px-2 py-1 rounded-md border border-border bg-background text-sm"
+                          placeholder="Label"
+                        />
+                        <input
+                          value={Number.isFinite(editSortOrder) ? String(editSortOrder) : "0"}
+                          onChange={(e) => setEditSortOrder(Number(e.target.value))}
+                          className="px-2 py-1 rounded-md border border-border bg-background text-sm"
+                          placeholder="Sort"
+                          inputMode="numeric"
+                        />
                       </div>
-                    </div>
+                    ) : (
+                      <div className="min-w-0">
+                        <div className="font-semibold text-foreground">{g.label}</div>
+                        <div className="text-xs text-muted-foreground">
+                          code: <span className="font-mono">{g.code}</span> · sort: {g.sort_order ?? 0}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <button
-                    onClick={() => onDelete(g)}
-                    className="p-2 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                    title="Remove grade"
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    {editingId === g.id ? (
+                      <>
+                        <button
+                          onClick={() => saveEdit(g)}
+                          className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted"
+                          title="Save changes"
+                        >
+                          <Check size={16} />
+                        </button>
+                        <button
+                          onClick={cancelEdit}
+                          className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted"
+                          title="Cancel"
+                        >
+                          <X size={16} />
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => startEdit(g)}
+                          className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted"
+                          title="Edit grade"
+                        >
+                          <Pencil size={16} />
+                        </button>
+                        <button
+                          onClick={() => onDelete(g)}
+                          className="p-2 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                          title="Remove grade"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

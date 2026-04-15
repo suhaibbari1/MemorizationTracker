@@ -30,3 +30,13 @@ export async function reorderGrades(ids: string[]): Promise<void> {
   });
 }
 
+export async function updateGrade(
+  id: string,
+  patch: { code?: string; label?: string; sortOrder?: number }
+): Promise<void> {
+  await apiFetch<{ ok: true }>(`/api/grades/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+}
+

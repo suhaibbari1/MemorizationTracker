@@ -162,6 +162,43 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
       return json({ ok: true });
     }
 
+    // PATCH /api/grades/:id { code?, label?, sortOrder? }
+    if (method === "PATCH" && path.length === 2 && path[0] === "grades") {
+      const id = path[1];
+      const body = await readJson<{ code?: string; label?: string; sortOrder?: number }>(request);
+      const updates: string[] = [];
+      const binds: any[] = [];
+
+      if (typeof body.code === "string") {
+        const code = body.code.trim();
+        if (!code) return badRequest("code cannot be empty");
+        updates.push("code = ?");
+        binds.push(code);
+      }
+      if (typeof body.label === "string") {
+        const label = body.label.trim();
+        if (!label) return badRequest("label cannot be empty");
+        updates.push("label = ?");
+        binds.push(label);
+      }
+      if (body.sortOrder !== undefined) {
+        const sortOrder = Number(body.sortOrder);
+        if (!Number.isFinite(sortOrder)) return badRequest("sortOrder must be a number");
+        updates.push("sort_order = ?");
+        binds.push(sortOrder);
+      }
+
+      if (updates.length === 0) return badRequest("No fields to update");
+
+      binds.push(id);
+      await env.DB
+        .prepare(`UPDATE grades SET ${updates.join(", ")} WHERE id = ?`)
+        .bind(...binds)
+        .run();
+
+      return json({ ok: true });
+    }
+
     // POST /api/grades/reorder { ids: string[] }
     if (method === "POST" && path.length === 2 && path[0] === "grades" && path[1] === "reorder") {
       const body = await readJson<{ ids?: string[] }>(request);
