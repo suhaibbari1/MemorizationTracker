@@ -7,6 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "build:dev": "vite build --mode development",
+    "import:xlsx": "node scripts/import-xlsx.mjs",
+    "add:custom-item-all": "node scripts/add-custom-item-all.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",

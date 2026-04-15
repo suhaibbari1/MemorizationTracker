@@ -87,12 +87,14 @@ export interface CustomItemProgress {
 export interface StudentData {
   id: string;
   name: string;
+  grade?: string;
   progress: Record<number, SurahProgress>;
   customItems: CustomItemProgress[];
 }
 
-export async function loadData(): Promise<StudentData[]> {
-  return await apiFetch<StudentData[]>("/api/students", { method: "GET" });
+export async function loadData(grade?: string): Promise<StudentData[]> {
+  const qs = grade ? `?${new URLSearchParams({ grade }).toString()}` : "";
+  return await apiFetch<StudentData[]>(`/api/students${qs}`, { method: "GET" });
 }
 
 export async function upsertSurahProgress(
@@ -141,10 +143,10 @@ export async function deleteCustomItem(itemId: string): Promise<void> {
   await apiFetch<{ ok: true }>(`/api/custom-items/${encodeURIComponent(itemId)}`, { method: "DELETE" });
 }
 
-export async function addStudent(name: string): Promise<string> {
+export async function addStudent(name: string, grade: string = "4th"): Promise<string> {
   const res = await apiFetch<{ id: string }>("/api/students", {
     method: "POST",
-    body: JSON.stringify({ name: name.trim() }),
+    body: JSON.stringify({ name: name.trim(), grade }),
   });
   return res.id;
 }

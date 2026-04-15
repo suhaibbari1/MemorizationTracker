@@ -25,10 +25,11 @@ const Index = () => {
   const [loading, setLoading] = useState(true);
   const [newStudentName, setNewStudentName] = useState("");
   const [showAddForm, setShowAddForm] = useState(false);
+  const [grade, setGrade] = useState<"3rd" | "4th">("4th");
 
   const fetchData = useCallback(async () => {
     try {
-      const data = await loadData();
+      const data = await loadData(grade);
       setStudents(data);
     } catch (err) {
       console.error("Failed to load data:", err);
@@ -36,7 +37,7 @@ const Index = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [grade]);
 
   useEffect(() => {
     fetchData();
@@ -205,7 +206,7 @@ const Index = () => {
       return;
     }
     try {
-      await addStudent(name);
+      await addStudent(name, grade);
       setNewStudentName("");
       setShowAddForm(false);
       toast.success(`Added ${name}`);
@@ -281,6 +282,28 @@ const Index = () => {
           <>
             <div className="mb-6 flex items-center justify-center">
               <div className="flex rounded-lg border border-border bg-background p-1">
+                <button
+                  onClick={() => setGrade("3rd")}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                    grade === "3rd"
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  title="3rd Grade"
+                >
+                  3rd
+                </button>
+                <button
+                  onClick={() => setGrade("4th")}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                    grade === "4th"
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  title="4th Grade"
+                >
+                  4th
+                </button>
                 <button
                   onClick={() => setView('students')}
                   className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${

@@ -76,6 +76,10 @@ Tables:
 - `surah_progress`
 - `custom_items` (for items like “Dua e Qunoot”)
 
+Grade separation:
+
+- Run `migrations/0002_add_grade.sql` once to add the `students.grade` column.
+
 ## 📜 Available Scripts
 
 - `npm run dev`: Start development server

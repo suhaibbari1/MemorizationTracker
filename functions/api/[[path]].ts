@@ -51,9 +51,19 @@ async function readJson<T>(req: Request): Promise<T> {
 }
 
 async function loadAllStudentData(db: D1Database) {
-  const students = await db
-    .prepare("SELECT id, name FROM students ORDER BY name")
-    .all<{ id: string; name: string }>();
+  // Support both old schema (no grade column) and new schema (grade)
+  let students:
+    | D1Result<{ id: string; name: string; grade?: string }>
+    | undefined;
+  try {
+    students = await db
+      .prepare("SELECT id, name, grade FROM students ORDER BY name")
+      .all<{ id: string; name: string; grade: string }>();
+  } catch {
+    students = await db
+      .prepare("SELECT id, name FROM students ORDER BY name")
+      .all<{ id: string; name: string }>();
+  }
 
   const progressRows = await db
     .prepare("SELECT student_id, surah_number, stars, first_attempt, attempts FROM surah_progress")
@@ -81,6 +91,7 @@ async function loadAllStudentData(db: D1Database) {
   return (students.results || []).map((s) => ({
     id: s.id,
     name: s.name,
+    grade: (s as any).grade || "4th",
     progress: byStudentProgress.get(s.id) || {},
     customItems: byStudentCustom.get(s.id) || [],
   }));
@@ -98,21 +109,33 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
   try {
     // GET /api/students
     if (method === "GET" && path.length === 1 && path[0] === "students") {
+      const grade = url.searchParams.get("grade");
       const data = await loadAllStudentData(env.DB);
-      return json(data);
+      if (!grade) return json(data);
+      return json(data.filter((s: any) => String(s.grade || "4th") === grade));
     }
 
     // POST /api/students { name }
     if (method === "POST" && path.length === 1 && path[0] === "students") {
-      const body = await readJson<{ name?: string }>(request);
+      const body = await readJson<{ name?: string; grade?: string }>(request);
       const name = (body.name || "").trim();
       if (!name) return badRequest("Name is required");
+      const grade = (body.grade || "4th").trim() || "4th";
 
       const id = uuidLike();
-      const res = await env.DB
-        .prepare("INSERT INTO students (id, name) VALUES (?, ?)")
-        .bind(id, name)
-        .run();
+      let res: D1Result | undefined;
+      try {
+        res = await env.DB
+          .prepare("INSERT INTO students (id, name, grade) VALUES (?, ?, ?)")
+          .bind(id, name, grade)
+          .run();
+      } catch {
+        // Old schema fallback (no grade column)
+        res = await env.DB
+          .prepare("INSERT INTO students (id, name) VALUES (?, ?)")
+          .bind(id, name)
+          .run();
+      }
 
       if (res.success) return json({ id });
       return json({ error: "Failed to insert student" }, { status: 500 });
@@ -254,6 +277,7 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
       const body = await readJson<{
         students?: {
           name: string;
+          grade?: string;
           progress: Record<string, { stars: number; firstAttempt: boolean; attempts: number }>;
           customItems?: { title: string; stars: number; firstAttempt: boolean; attempts: number }[];
         }[];
@@ -263,7 +287,18 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
       if (!Array.isArray(list)) return badRequest("students must be an array");
 
       // Map existing students by name
-      const existing = await env.DB.prepare("SELECT id, name FROM students").all<{ id: string; name: string }>();
+      let existing:
+        | D1Result<{ id: string; name: string; grade?: string }>
+        | undefined;
+      let hasGrade = true;
+      try {
+        existing = await env.DB
+          .prepare("SELECT id, name, grade FROM students")
+          .all<{ id: string; name: string; grade: string }>();
+      } catch {
+        hasGrade = false;
+        existing = await env.DB.prepare("SELECT id, name FROM students").all<{ id: string; name: string }>();
+      }
       const nameToId = new Map((existing.results || []).map((s) => [s.name, s.id]));
 
       const statements: D1PreparedStatement[] = [];
@@ -274,7 +309,16 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
         if (!id) {
           id = uuidLike();
           nameToId.set(name, id);
-          statements.push(env.DB.prepare("INSERT INTO students (id, name) VALUES (?, ?)").bind(id, name));
+          const grade = (s.grade || "4th").trim() || "4th";
+          if (hasGrade) {
+            statements.push(env.DB.prepare("INSERT INTO students (id, name, grade) VALUES (?, ?, ?)").bind(id, name, grade));
+          } else {
+            statements.push(env.DB.prepare("INSERT INTO students (id, name) VALUES (?, ?)").bind(id, name));
+          }
+        } else if (hasGrade && s.grade) {
+          // Keep grade up to date if provided
+          const grade = s.grade.trim() || "4th";
+          statements.push(env.DB.prepare("UPDATE students SET grade=? WHERE id=?").bind(grade, id));
         }
 
         for (const [surahNumStr, p] of Object.entries(s.progress || {})) {
