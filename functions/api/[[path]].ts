@@ -2,6 +2,13 @@ type Env = {
   DB: D1Database;
 };
 
+type GradeRow = {
+  id: string;
+  code: string;
+  label: string;
+  sort_order: number;
+};
+
 type SurahProgressRow = {
   surah_number: number;
   stars: number;
@@ -107,6 +114,54 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
   const path = raw.split("/").filter(Boolean);
 
   try {
+    // GET /api/grades
+    if (method === "GET" && path.length === 1 && path[0] === "grades") {
+      // Support old DBs (no grades table yet)
+      try {
+        const rows = await env.DB
+          .prepare("SELECT id, code, label, sort_order FROM grades ORDER BY sort_order ASC, label ASC")
+          .all<GradeRow>();
+        return json(rows.results || []);
+      } catch {
+        return json([
+          { id: "grade-3rd", code: "3rd", label: "3rd Grade", sort_order: 30 },
+          { id: "grade-4th", code: "4th", label: "4th Grade", sort_order: 40 },
+        ]);
+      }
+    }
+
+    // POST /api/grades { code, label, sortOrder? }
+    if (method === "POST" && path.length === 1 && path[0] === "grades") {
+      const body = await readJson<{ code?: string; label?: string; sortOrder?: number }>(request);
+      const code = (body.code || "").trim();
+      const label = (body.label || "").trim();
+      const sortOrder = Number.isFinite(Number(body.sortOrder)) ? Number(body.sortOrder) : 0;
+      if (!code) return badRequest("code is required");
+      if (!label) return badRequest("label is required");
+
+      // Ensure table exists (in case migration hasn't run yet)
+      await env.DB.batch([
+        env.DB.prepare(
+          "CREATE TABLE IF NOT EXISTS grades (id TEXT PRIMARY KEY, code TEXT NOT NULL UNIQUE, label TEXT NOT NULL, sort_order INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')))"
+        ),
+        env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_grades_sort ON grades(sort_order, label)"),
+      ]);
+
+      const id = uuidLike();
+      await env.DB
+        .prepare("INSERT INTO grades (id, code, label, sort_order) VALUES (?, ?, ?, ?)")
+        .bind(id, code, label, sortOrder)
+        .run();
+      return json({ id });
+    }
+
+    // DELETE /api/grades/:id
+    if (method === "DELETE" && path.length === 2 && path[0] === "grades") {
+      const id = path[1];
+      await env.DB.prepare("DELETE FROM grades WHERE id = ?").bind(id).run();
+      return json({ ok: true });
+    }
+
     // GET /api/students
     if (method === "GET" && path.length === 1 && path[0] === "students") {
       const grade = url.searchParams.get("grade");

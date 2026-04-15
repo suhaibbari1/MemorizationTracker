@@ -17,6 +17,7 @@ import { Leaderboard } from "@/components/Leaderboard";
 import { Users, BarChart3, Loader2, Plus, Trash2 } from "lucide-react";
 import { useSwipe } from "@/hooks/use-swipe";
 import wiseLogo from "@/assets/wise-logo.jpg";
+import { loadGrades, type Grade } from "@/lib/grades";
 
 function getStudentPerfStats(student: StudentData) {
   const surahProgress = Object.values(student.progress || {});
@@ -62,7 +63,8 @@ const Index = () => {
   const [loading, setLoading] = useState(true);
   const [newStudentName, setNewStudentName] = useState("");
   const [showAddForm, setShowAddForm] = useState(false);
-  const [grade, setGrade] = useState<"3rd" | "4th">("4th");
+  const [grades, setGrades] = useState<Grade[]>([]);
+  const [grade, setGrade] = useState<string>("4th");
   const [sortMode, setSortMode] = useState<SortMode>(() => {
     const saved = localStorage.getItem("studentSortMode");
     return saved === "alpha" ? "alpha" : "performance";
@@ -71,6 +73,22 @@ const Index = () => {
   useEffect(() => {
     localStorage.setItem("studentSortMode", sortMode);
   }, [sortMode]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const g = await loadGrades();
+        setGrades(g);
+        // If current grade isn't in list, fall back to first grade
+        if (g.length > 0 && !g.some((x) => x.code === grade)) {
+          setGrade(g[0].code);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const fetchData = useCallback(async () => {
     try {
@@ -331,28 +349,20 @@ const Index = () => {
           <>
             <div className="mb-6 flex items-center justify-center">
               <div className="flex rounded-lg border border-border bg-background p-1">
-                <button
-                  onClick={() => setGrade("3rd")}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                    grade === "3rd"
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                  title="3rd Grade"
-                >
-                  3rd
-                </button>
-                <button
-                  onClick={() => setGrade("4th")}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                    grade === "4th"
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                  title="4th Grade"
-                >
-                  4th
-                </button>
+                {grades.map((g) => (
+                  <button
+                    key={g.id}
+                    onClick={() => setGrade(g.code)}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                      grade === g.code
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                    title={g.label}
+                  >
+                    {g.code}
+                  </button>
+                ))}
                 <button
                   onClick={() => setView('students')}
                   className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
