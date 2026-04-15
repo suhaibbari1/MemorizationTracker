@@ -18,9 +18,39 @@ import { Users, BarChart3, Loader2, Plus, Trash2 } from "lucide-react";
 import { useSwipe } from "@/hooks/use-swipe";
 import wiseLogo from "@/assets/wise-logo.jpg";
 
+function getStudentPerfStats(student: StudentData) {
+  const surahProgress = Object.values(student.progress || {});
+  const custom = student.customItems || [];
+
+  const completed =
+    surahProgress.filter((p) => p.stars === 5).length +
+    custom.filter((p) => p.stars === 5).length;
+
+  const firstAttemptPerfect =
+    surahProgress.filter((p) => p.stars === 5 && p.firstAttempt).length +
+    custom.filter((p) => p.stars === 5 && p.firstAttempt).length;
+
+  const totalStars =
+    surahProgress.reduce((sum, p) => sum + p.stars, 0) +
+    custom.reduce((sum, p) => sum + p.stars, 0);
+
+  return { totalStars, completed, firstAttemptPerfect };
+}
+
+function sortStudentsByPerformance(list: StudentData[]) {
+  return [...list].sort((a, b) => {
+    const sa = getStudentPerfStats(a);
+    const sb = getStudentPerfStats(b);
+    if (sb.totalStars !== sa.totalStars) return sb.totalStars - sa.totalStars;
+    if (sb.completed !== sa.completed) return sb.completed - sa.completed;
+    if (sb.firstAttemptPerfect !== sa.firstAttemptPerfect) return sb.firstAttemptPerfect - sa.firstAttemptPerfect;
+    return a.name.localeCompare(b.name);
+  });
+}
+
 const Index = () => {
   const [students, setStudents] = useState<StudentData[]>([]);
-  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [view, setView] = useState<'students' | 'report'>('students');
   const [loading, setLoading] = useState(true);
   const [newStudentName, setNewStudentName] = useState("");
@@ -30,7 +60,7 @@ const Index = () => {
   const fetchData = useCallback(async () => {
     try {
       const data = await loadData(grade);
-      setStudents(data);
+      setStudents(sortStudentsByPerformance(data));
     } catch (err) {
       console.error("Failed to load data:", err);
       toast.error("Backend not reachable. Set VITE_API_BASE or run via Cloudflare Pages dev.");
@@ -55,7 +85,7 @@ const Index = () => {
       const s = { ...updated[studentIdx] };
       s.progress = { ...s.progress, [surahNumber]: { stars, firstAttempt, attempts } };
       updated[studentIdx] = s;
-      return updated;
+      return sortStudentsByPerformance(updated);
     });
 
     try {
@@ -80,7 +110,7 @@ const Index = () => {
         { id: `temp:${Date.now()}`, title: trimmed, stars: 0, firstAttempt: true, attempts: 0 },
       ].sort((a, b) => a.title.localeCompare(b.title));
       updated[studentIdx] = s;
-      return updated;
+      return sortStudentsByPerformance(updated);
     });
 
     try {
@@ -107,7 +137,7 @@ const Index = () => {
         ci.id === itemId ? { ...ci, stars, firstAttempt, attempts } : ci
       );
       updated[studentIdx] = s;
-      return updated;
+      return sortStudentsByPerformance(updated);
     });
 
     try {
@@ -126,7 +156,7 @@ const Index = () => {
       const s = { ...updated[studentIdx] };
       s.customItems = s.customItems.filter((ci) => ci.id !== itemId);
       updated[studentIdx] = s;
-      return updated;
+      return sortStudentsByPerformance(updated);
     });
 
     // If it's an optimistic temp item, just drop it locally
@@ -151,7 +181,7 @@ const Index = () => {
       const { [surahNumber]: _, ...rest } = s.progress;
       s.progress = rest;
       updated[studentIdx] = s;
-      return updated;
+      return sortStudentsByPerformance(updated);
     });
 
     try {
@@ -178,7 +208,7 @@ const Index = () => {
       }
       s.progress = newProgress;
       updated[studentIdx] = s;
-      return updated;
+      return sortStudentsByPerformance(updated);
     });
 
     try {
@@ -231,20 +261,24 @@ const Index = () => {
 
   // Swipe between tabs (Students ↔ Report)
   const tabSwipe = useSwipe({
-    onSwipeLeft: () => { if (selectedIndex === null) setView('report'); },
-    onSwipeRight: () => { if (selectedIndex === null) setView('students'); },
+    onSwipeLeft: () => { if (selectedStudentId === null) setView('report'); },
+    onSwipeRight: () => { if (selectedStudentId === null) setView('students'); },
   });
 
   // Swipe between students in detail view
   const studentSwipe = useSwipe({
     onSwipeLeft: () => {
-      if (selectedIndex !== null && selectedIndex < students.length - 1) {
-        setSelectedIndex(selectedIndex + 1);
+      if (selectedStudentId === null) return;
+      const idx = students.findIndex((s) => s.id === selectedStudentId);
+      if (idx >= 0 && idx < students.length - 1) {
+        setSelectedStudentId(students[idx + 1].id);
       }
     },
     onSwipeRight: () => {
-      if (selectedIndex !== null && selectedIndex > 0) {
-        setSelectedIndex(selectedIndex - 1);
+      if (selectedStudentId === null) return;
+      const idx = students.findIndex((s) => s.id === selectedStudentId);
+      if (idx > 0) {
+        setSelectedStudentId(students[idx - 1].id);
       }
     },
   });
@@ -277,8 +311,8 @@ const Index = () => {
         </div>
       </header>
 
-      <main className="container max-w-3xl mx-auto px-4 py-6" {...(selectedIndex === null ? tabSwipe : studentSwipe)}>
-        {selectedIndex === null ? (
+      <main className="container max-w-3xl mx-auto px-4 py-6" {...(selectedStudentId === null ? tabSwipe : studentSwipe)}>
+        {selectedStudentId === null ? (
           <>
             <div className="mb-6 flex items-center justify-center">
               <div className="flex rounded-lg border border-border bg-background p-1">
@@ -372,7 +406,7 @@ const Index = () => {
                     <div key={student.id} className="relative group">
                       <StudentCard
                         student={student}
-                        onClick={() => setSelectedIndex(idx)}
+                        onClick={() => setSelectedStudentId(student.id)}
                       />
                       <button
                         onClick={(e) => {
@@ -393,22 +427,29 @@ const Index = () => {
             )}
           </>
         ) : (
-          <StudentDetail
-            student={students[selectedIndex]}
-            onBack={() => setSelectedIndex(null)}
-            onUpdateSurah={(surahNumber, stars) =>
-              handleUpdateSurah(selectedIndex, surahNumber, stars)
-            }
-            onResetSurah={(surahNumber) =>
-              handleResetSurah(selectedIndex, surahNumber)
-            }
-            onBulkUpdate={(surahNumbers, stars) =>
-              handleBulkUpdate(selectedIndex, surahNumbers, stars)
-            }
-            onAddCustomItem={(title) => handleAddCustomItem(selectedIndex, title)}
-            onUpdateCustomItem={(itemId, stars) => handleUpdateCustomItem(selectedIndex, itemId, stars)}
-            onDeleteCustomItem={(itemId, title) => handleDeleteCustomItem(selectedIndex, itemId, title)}
-          />
+          (() => {
+            const idx = students.findIndex((s) => s.id === selectedStudentId);
+            const selected = idx >= 0 ? students[idx] : null;
+            if (!selected) return null;
+            return (
+              <StudentDetail
+                student={selected}
+                onBack={() => setSelectedStudentId(null)}
+                onUpdateSurah={(surahNumber, stars) =>
+                  handleUpdateSurah(idx, surahNumber, stars)
+                }
+                onResetSurah={(surahNumber) =>
+                  handleResetSurah(idx, surahNumber)
+                }
+                onBulkUpdate={(surahNumbers, stars) =>
+                  handleBulkUpdate(idx, surahNumbers, stars)
+                }
+                onAddCustomItem={(title) => handleAddCustomItem(idx, title)}
+                onUpdateCustomItem={(itemId, stars) => handleUpdateCustomItem(idx, itemId, stars)}
+                onDeleteCustomItem={(itemId, title) => handleDeleteCustomItem(idx, itemId, title)}
+              />
+            );
+          })()
         )}
       </main>
     </div>
