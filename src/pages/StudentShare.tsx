@@ -60,7 +60,7 @@ const StudentShare = () => {
                 WISE Sunday School
               </h1>
               <p className="text-xs text-muted-foreground">
-                4th Grade Quran Memorization Tracker
+                Quran Memorization Tracker
               </p>
             </div>
           </div>
