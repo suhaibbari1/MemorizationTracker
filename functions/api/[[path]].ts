@@ -31,6 +31,43 @@ type GradeSurahRow = {
   sort_order: number;
 };
 
+async function ensureGradeSurahsTable(db: D1Database) {
+  await db.batch([
+    db.prepare(
+      "CREATE TABLE IF NOT EXISTS grade_surahs (id TEXT PRIMARY KEY, grade_code TEXT NOT NULL, surah_number INTEGER NOT NULL, sort_order INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')), UNIQUE (grade_code, surah_number))"
+    ),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_grade_surahs_grade_sort ON grade_surahs(grade_code, sort_order, surah_number)"),
+  ]);
+}
+
+async function seedDefaultSurahsForGrade(db: D1Database, gradeCode: string) {
+  await ensureGradeSurahsTable(db);
+
+  // Try to copy from 4th grade if it exists
+  const copied = await db
+    .prepare(
+      "INSERT OR IGNORE INTO grade_surahs (id, grade_code, surah_number, sort_order) " +
+        "SELECT ('gs-' || ? || '-' || surah_number) as id, ? as grade_code, surah_number, sort_order " +
+        "FROM grade_surahs WHERE grade_code = '4th'"
+    )
+    .bind(gradeCode, gradeCode)
+    .run();
+
+  // If nothing copied, fall back to the default last-21 (114..94)
+  if ((copied.changes || 0) === 0) {
+    const stmts: D1PreparedStatement[] = [];
+    let order = 10;
+    for (let n = 114; n >= 94; n--) {
+      stmts.push(
+        db.prepare("INSERT OR IGNORE INTO grade_surahs (id, grade_code, surah_number, sort_order) VALUES (?, ?, ?, ?)")
+          .bind(`gs-${gradeCode}-${n}`, gradeCode, n, order)
+      );
+      order += 10;
+    }
+    await db.batch(stmts);
+  }
+}
+
 function json(data: unknown, init?: ResponseInit) {
   return new Response(JSON.stringify(data), {
     headers: {
@@ -159,6 +196,14 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
         .prepare("INSERT INTO grades (id, code, label, sort_order) VALUES (?, ?, ?, ?)")
         .bind(id, code, label, sortOrder)
         .run();
+
+      // Initialize surah list for this grade (copy from 4th if possible)
+      try {
+        await seedDefaultSurahsForGrade(env.DB, code);
+      } catch (e) {
+        // Non-fatal: grade can still be configured manually in admin UI
+        console.error("Failed to seed grade_surahs for", code, e);
+      }
       return json({ id });
     }
 
