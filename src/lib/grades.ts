@@ -5,10 +5,13 @@ export type Grade = {
   code: string;
   label: string;
   sort_order: number;
+  is_archived?: number;
+  archived_at?: string | null;
 };
 
-export async function loadGrades(): Promise<Grade[]> {
-  return await apiFetch<Grade[]>("/api/grades", { method: "GET" });
+export async function loadGrades(opts?: { includeArchived?: boolean }): Promise<Grade[]> {
+  const qs = opts?.includeArchived ? "?includeArchived=1" : "";
+  return await apiFetch<Grade[]>(`/api/grades${qs}`, { method: "GET" });
 }
 
 export async function addGrade(input: { code: string; label: string; sortOrder?: number }): Promise<string> {
@@ -32,7 +35,7 @@ export async function reorderGrades(ids: string[]): Promise<void> {
 
 export async function updateGrade(
   id: string,
-  patch: { code?: string; label?: string; sortOrder?: number }
+  patch: { code?: string; label?: string; sortOrder?: number; isArchived?: boolean }
 ): Promise<void> {
   await apiFetch<{ ok: true }>(`/api/grades/${encodeURIComponent(id)}`, {
     method: "PATCH",

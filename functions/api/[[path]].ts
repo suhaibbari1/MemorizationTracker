@@ -7,6 +7,8 @@ type GradeRow = {
   code: string;
   label: string;
   sort_order: number;
+  is_archived?: number;
+  archived_at?: string | null;
 };
 
 type SurahProgressRow = {
@@ -161,9 +163,14 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
     // GET /api/grades
     if (method === "GET" && path.length === 1 && path[0] === "grades") {
       // Support old DBs (no grades table yet)
+      const includeArchived = url.searchParams.get("includeArchived") === "1";
       try {
         const rows = await env.DB
-          .prepare("SELECT id, code, label, sort_order FROM grades ORDER BY sort_order ASC, label ASC")
+          .prepare(
+            includeArchived
+              ? "SELECT id, code, label, sort_order, is_archived, archived_at FROM grades ORDER BY sort_order ASC, label ASC"
+              : "SELECT id, code, label, sort_order, is_archived, archived_at FROM grades WHERE COALESCE(is_archived, 0) = 0 ORDER BY sort_order ASC, label ASC"
+          )
           .all<GradeRow>();
         return json(rows.results || []);
       } catch {
@@ -217,7 +224,7 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
     // PATCH /api/grades/:id { code?, label?, sortOrder? }
     if (method === "PATCH" && path.length === 2 && path[0] === "grades") {
       const id = path[1];
-      const body = await readJson<{ code?: string; label?: string; sortOrder?: number }>(request);
+      const body = await readJson<{ code?: string; label?: string; sortOrder?: number; isArchived?: boolean }>(request);
       const updates: string[] = [];
       const binds: any[] = [];
 
@@ -238,6 +245,14 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
         if (!Number.isFinite(sortOrder)) return badRequest("sortOrder must be a number");
         updates.push("sort_order = ?");
         binds.push(sortOrder);
+      }
+
+      if (body.isArchived !== undefined) {
+        const archived = body.isArchived ? 1 : 0;
+        updates.push("is_archived = ?");
+        binds.push(archived);
+        updates.push("archived_at = ?");
+        binds.push(archived ? nowIso() : null);
       }
 
       if (updates.length === 0) return badRequest("No fields to update");

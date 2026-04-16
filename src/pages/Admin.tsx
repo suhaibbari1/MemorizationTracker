@@ -29,7 +29,7 @@ const Admin = () => {
   async function refresh() {
     try {
       setLoading(true);
-      const data = await loadGrades();
+      const data = await loadGrades({ includeArchived: true });
       // Keep in the same order returned by API (already sorted by sort_order)
       setGrades(data);
       setDirtyOrder(false);
@@ -139,6 +139,17 @@ const Admin = () => {
       });
       toast.success("Grade updated");
       cancelEdit();
+      refresh();
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.message || "Failed to update grade");
+    }
+  };
+
+  const archiveGrade = async (g: Grade, archived: boolean) => {
+    try {
+      await updateGrade(g.id, { isArchived: archived });
+      toast.success(archived ? "Grade archived" : "Grade unarchived");
       refresh();
     } catch (e: any) {
       console.error(e);
@@ -446,6 +457,13 @@ const Admin = () => {
                       </>
                     ) : (
                       <>
+                        <button
+                          onClick={() => archiveGrade(g, !(g.is_archived === 1))}
+                          className="px-2 py-1 rounded-md border border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted"
+                          title={g.is_archived === 1 ? "Unarchive grade" : "Archive grade"}
+                        >
+                          {g.is_archived === 1 ? "Unarchive" : "Archive"}
+                        </button>
                         <button
                           onClick={() => startEdit(g)}
                           className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted"
